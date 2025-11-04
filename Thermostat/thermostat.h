@@ -63,17 +63,6 @@
 
 #define DEFAULT_BRIGHTNESS            80
 
-#define eWD608_RESULT                 0xC0   // Theresult of the tray
-#define eWD608_CURSOR_L               0xC1   // The cursor of the tray
-#define eWD608_CURSOR_H               0xC2   // The cursor of the tray
-#define eWD608_VECTOR                 0xC3   // The vector of the tray, Forward：0x01 Reverse：0xFF
-#define eWD608_FORWARD                0x01   // Forward：0x01 
-#define eWD608_REVERSE                0xFF   // Reverse：0xFF
-
-#define TOUCH_EVENT                   BIT7   // Bit 7(Gesture):Touch Status. If this bit is “1”, It represent to touch event happened.
-#define NEW_CURSOR_EVENT              BIT6   // Bit 6(NewCursor):New Cursor Status. If this bit is “1”, It represent to new Cursor event happened.
-#define CURSOR_0_EVENT                BIT0   // Bit 0 (Cur0): Cursor 0 status. If this bit is “1”，It represent to cursor 0 is touched. Valid if Touch Status is “1”
-
 typedef enum {
   CHANGE_STATE, 
   WAIT_CMD_STATE, 
@@ -89,20 +78,28 @@ typedef enum {
 
 typedef struct {
   uint32_t             Brightness;
-  uint8_t              TouchRawData0;
-  uint8_t              TouchRawData1;
+  uint8_t              TouchResult;
+  uint8_t              TouchCursorL;
+  uint8_t              TouchCursorH;
+  uint8_t              TouchVector;
+  uint8_t              EepromRxData;
+  uint8_t              EepromTxData[3];
 
   union {
       uint32_t Misc;
       struct {
            uint32_t GUI_INIT_READY:1;
            uint32_t GUI_READY:1;
+           uint32_t TOUCH_RESULT_AVAILABLE:1;
+           uint32_t TOUCH_CURSOR_L_AVAILABLE:1;
+           uint32_t TOUCH_CURSOR_H_AVAILABLE:1;
+           uint32_t TOUCH_VECTOR_AVAILABLE:1;
            uint32_t TOUCH_PRESSED:1;
            uint32_t TOUCH_RELEASED:1;
            uint32_t TOUCH_FORWARD:1;
            uint32_t TOUCH_REVERSE:1;
            uint32_t EEPROM_WRITE_DONE:1;
-           uint32_t RESERVED:25;
+           uint32_t RESERVED:21;
       } MISC;
   };
 
@@ -141,7 +138,8 @@ typedef struct {
 typedef struct {
   uint8_t              Valid;
   uint8_t              Touch_State;
-  uint8_t              Offset;
+  uint8_t              Index;
+  const I2C_ACCESS_ENTRY *entry;
   I2C_CONTEXT          *ctx;
   THERMOSTAT_DATA_STRC *ThermostatDataPtr;
   TIMER_CTRL_STRC      *TimerPtr;

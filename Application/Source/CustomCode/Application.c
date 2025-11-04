@@ -693,7 +693,7 @@ static void _SetTextPos(void) {
     // Calculate position
     //
     Angle = _Value100ToAngle1000(_Context.vActual100);
-    Angle += (_Context.vActual100 > _Context.vTarget100) ? -8000 : +8000;
+    Angle += (_Context.vActual100 > _Context.vTarget100) ? -8000 : +12000;
     SinHQ = GUI__SinHQ(Angle);
     CosHQ = GUI__CosHQ(Angle);
     x = ((MX << 16) + (CosHQ * (R0 - 16)) + 32768) >> 16;
@@ -741,12 +741,16 @@ static void _AnimActual(GUI_ANIM_INFO * pInfo, void * pVoid) {
   } else {
     WM_ShowWindow(_Context.hTextS5);
   }
+
+  #if 0
   //
   // Set background color
   //
   Setup.Command = APPW_SET_PROP_COLOR;
   Setup.aPara[0].v = _GetBkColor();
   WM_OBJECT_BOX_Setup(_Context.hBox, &Setup);
+  #endif
+
   //
   // Set position of actual temperature
   //
@@ -841,14 +845,14 @@ void APP_OnReleased(void) {
     //
     _Context.vAnimStart = _Context.vActual100;
     Period = _Abs(_Context.vTarget100 - _Context.vActual100) * 10;
-    _Context.hAnimActual = GUI_ANIM_Create(Period, 400, NULL, NULL);
+    _Context.hAnimActual = GUI_ANIM_Create(Period, 40, NULL, NULL);
     GUI_ANIM_AddItem(_Context.hAnimActual, 0, Period, ANIM_DECEL, NULL, _AnimActual);
     GUI_ANIM_StartEx(_Context.hAnimActual, 1, _OnAnimDelete);
     //
     // Start animation of dots
     //
     Period = PERIOD_DOT_ANIM;
-    _Context.hAnimDots = GUI_ANIM_Create(Period, 400, NULL, NULL);
+    _Context.hAnimDots = GUI_ANIM_Create(Period, 40, NULL, NULL);
     GUI_ANIM_AddItem(_Context.hAnimDots, 0, Period, ANIM_LINEAR, NULL, _AnimDots);
     GUI_ANIM_StartEx(_Context.hAnimDots, -1, NULL);
   }

@@ -100,6 +100,19 @@ void ID_SCREEN_00__ID_ROTARY_TARGET__WM_NOTIFICATION_VALUE_CHANGED__ID_BOX__APPW
 
 /*********************************************************************
 *
+*       ID_SCREEN_00__ID_ROTARY_ACTUAL__WM_NOTIFICATION_VALUE_CHANGED__ID_BOX__APPW_JOB_SETCOLOR
+*/
+void ID_SCREEN_00__ID_ROTARY_ACTUAL__WM_NOTIFICATION_VALUE_CHANGED__ID_BOX__APPW_JOB_SETCOLOR(APPW_ACTION_ITEM * pAction, WM_HWIN hScreen, WM_MESSAGE * pMsg, int * pResult) {
+  GUI_USE_PARA(hScreen);
+  GUI_USE_PARA(pMsg);
+  GUI_USE_PARA(pResult);
+  APP_GetBoxColor(pAction);
+  WM_SetHasTrans(pMsg->hWin);
+
+}
+
+/*********************************************************************
+*
 *       ID_SCREEN_00__ID_ROTARY_TARGET__WM_NOTIFICATION_VALUE_CHANGED__ID_TEXT_L__APPW_JOB_SETVALUE
 */
 void ID_SCREEN_00__ID_ROTARY_TARGET__WM_NOTIFICATION_VALUE_CHANGED__ID_TEXT_L__APPW_JOB_SETVALUE(APPW_ACTION_ITEM * pAction, WM_HWIN hScreen, WM_MESSAGE * pMsg, int * pResult) {

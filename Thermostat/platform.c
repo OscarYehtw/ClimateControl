@@ -27,10 +27,8 @@ extern int ts_readfile(void);
 int ts_calibrate(int xsize, int ysize);
 
 /* Private typedef -----------------------------------------------------------*/   
-//typedef void (*I2C_FUNC)(uint32_t u32Status);
 
 /* Private define ------------------------------------------------------------*/   
-#define PLL_CLOCK              72000000
 
 /* Private macro -------------------------------------------------------------*/   
 
@@ -42,14 +40,7 @@ int ts_calibrate(int xsize, int ysize);
 I2C_CONTEXT I2C1_Ctx = { .base = I2C1 };
 I2C_CONTEXT I2C2_Ctx = { .base = I2C2 };
 
-static I2C_FUNC s_I2C1HandlerFn = NULL;
 static I2C_FUNC s_I2C2HandlerFn = NULL;
-
-uint8_t I2c1_DeviceAddr;
-uint8_t I2c1_TxData[2];
-uint8_t I2c1_RxData;
-volatile uint8_t I2c1_DataLen;
-volatile uint8_t I2c1_EndFlag = 0;
 
 uint8_t g_u8DeviceAddr;
 uint8_t g_au8TxData[3];
@@ -58,6 +49,17 @@ volatile uint8_t g_u8DataLen;
 volatile uint8_t g_u8EndFlag = 0;
 
 volatile int g_enable_Touch;
+
+const I2C_ACCESS_ENTRY g_I2C_AccessTable[] = {
+    // SlaveAddr,        Offset,     Length, R/W
+    {TOUCH_SLAVE_ADDR,   eWD608_RESULT,   1, I2C_RW_READ,  &ThermostatData.TouchResult,  NULL},  // Touch result
+    {TOUCH_SLAVE_ADDR,   eWD608_CURSOR_L, 1, I2C_RW_READ,  &ThermostatData.TouchCursorL, NULL},  // Cursor L
+    {TOUCH_SLAVE_ADDR,   eWD608_CURSOR_H, 1, I2C_RW_READ,  &ThermostatData.TouchCursorH, NULL},  // Cursor H
+    {TOUCH_SLAVE_ADDR,   eWD608_VECTOR,   1, I2C_RW_READ,  &ThermostatData.TouchVector,  NULL},  // Vector
+    //{EEPROM_SLAVE_ADDR,              0,   2, I2C_RW_READ,  &ThermostatData.EepromRxData, ThermostatData.EepromTxData},  // 24LC64 EEPROM
+    //{EEPROM_SLAVE_ADDR,              0,   3, I2C_RW_WRITE,                         NULL, ThermostatData.EepromTxData},  // 24LC64 EEPROM
+};
+const uint8_t g_I2C_AccessCount = sizeof(g_I2C_AccessTable) / sizeof(I2C_ACCESS_ENTRY);
 
 /*---------------------------------------------------------------------------------------------------------*/
 /* ISR to handle UART Channel 0 interrupt event                                                            */
@@ -181,7 +183,6 @@ static void I2C_IRQHandler_Common(I2C_CONTEXT *ctx) {
   return;
 }
 
-#if 1
 /**********************************************************************************************
  *  I2C1 IRQ Wrapper
  **********************************************************************************************/
@@ -224,7 +225,7 @@ static void I2cReadByte (uint32_t Status) {
           break;
       case 0x28:  /* DATA has been transmitted and ACK has been received */
           if (ctx->byteCount < ctx->length) {
-              I2C_SET_DATA(i2c, ctx->txBuf[ctx->length++]);
+              I2C_SET_DATA(i2c, ctx->txBuf[ctx->byteCount++]);
               I2C_SET_CONTROL_REG(i2c, I2C_CTL_SI);
           } else {
               I2C_SET_CONTROL_REG(i2c, I2C_CTL_STA | I2C_CTL_SI);
@@ -238,7 +239,7 @@ static void I2cReadByte (uint32_t Status) {
           I2C_SET_CONTROL_REG(i2c, I2C_CTL_SI);
           break;
       case 0x58:  /* DATA has been received and NACK has been returned */
-          ctx->rxData = I2C_GET_DATA(i2c);
+          *ctx->rxData = I2C_GET_DATA(i2c);
           ctx->txrxDone = TRUE;
           I2C_SET_CONTROL_REG(i2c, I2C_CTL_STO | I2C_CTL_SI);
           break;
@@ -249,19 +250,60 @@ static void I2cReadByte (uint32_t Status) {
 }
 
 /*---------------------------------------------------------------------------------------------------------*/
+/*  I2c2WriteByte Callback Function                                                                        */
+/*---------------------------------------------------------------------------------------------------------*/
+void I2c2WriteByte (uint32_t Status) {
+  I2C_CONTEXT *ctx = &I2C2_Ctx;
+  I2C_T *i2c = ctx->base;
+
+  //printf("I2c2WriteByte - Status: 0x%x\n", Status);
+  switch (Status) {
+      case 0x08:  /* START has been transmitted */
+          I2C_SET_DATA(i2c, (ctx->slaveAddr << 1));  /* Write SLA+W to Register I2CDAT */
+          I2C_SET_CONTROL_REG(i2c, I2C_CTL_SI);
+          break;
+      case 0x18:  /* SLA+W has been transmitted and ACK has been received */
+          I2C_SET_DATA(i2c, ctx->txBuf[ctx->byteCount++]);
+          I2C_SET_CONTROL_REG(i2c, I2C_CTL_SI);
+          break;
+      case 0x20:  /* SLA+W has been transmitted and NACK has been received */
+          I2C_SET_CONTROL_REG(i2c, I2C_CTL_STA | I2C_CTL_STO | I2C_CTL_SI);
+          break;
+      case 0x28:
+          if (ctx->byteCount < ctx->length) {
+            I2C_SET_DATA(i2c, ctx->txBuf[ctx->byteCount++]);
+            I2C_SET_CONTROL_REG(i2c, I2C_CTL_SI);
+          } else {
+            I2C_SET_CONTROL_REG(i2c, I2C_CTL_STO | I2C_CTL_SI);
+            ctx->txrxDone = TRUE;
+          }
+          break;
+      default:  /* TO DO */
+          printf("Status 0x%x is NOT processed\n", Status);
+          break;
+  }
+}
+
+/*---------------------------------------------------------------------------------------------------------*/
 /*  ReadingTouchSensor Function                                                                            */
 /*---------------------------------------------------------------------------------------------------------*/
-void ReadingTouchSensor (I2C_CONTEXT *ctx, uint8_t SlaveAddr, uint8_t Command, uint8_t Lenght, uint8_t Rw) {
+void ReadingTouchSensor (I2C_CONTEXT *ctx, const I2C_ACCESS_ENTRY *entry) {
 
   /* I2C function to read data from slave */
-  ctx->handler = (Rw) ? (I2C_FUNC)I2cReadByte: NULL;
+  ctx->handler = (entry->Rw) ? (I2C_FUNC)I2cReadByte : I2c2WriteByte;
 
   if (ctx->handler != NULL) {
-      ctx->slaveAddr = SlaveAddr;
-      ctx->txBuf[0]  = Command;
-      ctx->length    = Lenght;
+      ctx->slaveAddr = entry->SlaveAddr;
+      if (entry->SlaveAddr == EEPROM_SLAVE_ADDR) {
+          ctx->txBuf[0]  = entry->TxData[1];
+          ctx->txBuf[1]  = entry->TxData[0];
+          ctx->txBuf[2]  = entry->TxData[2];
+      } else {
+          ctx->txBuf[0]  = entry->Offset;
+      }
+      ctx->length    = entry->Length;
       ctx->byteCount = 0;
-      ctx->rxData    = 0;
+      ctx->rxData    = entry->RxData;
       ctx->txrxDone  = FALSE;
 
       /* I2C as master sends START signal */
@@ -270,109 +312,6 @@ void ReadingTouchSensor (I2C_CONTEXT *ctx, uint8_t SlaveAddr, uint8_t Command, u
 
   return;
 }
-#endif
-
-#if 0
-/*---------------------------------------------------------------------------------------------------------*/
-/*  I2C1 IRQ Handler                                                                                       */
-/*---------------------------------------------------------------------------------------------------------*/
-void I2C1_IRQHandler(void)
-{
-    uint32_t u32Status;
-
-    u32Status = I2C_GET_STATUS(I2C1);
-
-    if(I2C_GET_TIMEOUT_FLAG(I2C1))
-    {
-       /* Clear I2C1 Timeout Flag */
-       I2C_ClearTimeoutFlag(I2C1);
-    }
-    else
-    {
-       if(s_I2C1HandlerFn != NULL)
-          s_I2C1HandlerFn(u32Status);
-    }
-}
-
-/*---------------------------------------------------------------------------------------------------------*/
-/*  eWD608ReadByte Callback Function                                                                               */
-/*---------------------------------------------------------------------------------------------------------*/
-void eWD608ReadByte (uint32_t Status) {
-    printf("I2C1 - u32Status: 0x%x\n", Status);
-    if (Status == 0x08) { /* START has been transmitted and prepare SLA+W */
-        printf("I2C1 - Slave Addr: 0x%x\n", I2c1_DeviceAddr);
-        I2C_SET_DATA(I2C1, (I2c1_DeviceAddr << 1)); /* Write SLA+W to Register I2CDAT */
-        I2C_SET_CONTROL_REG(I2C1, I2C_CTL_SI);       
-    } else if (Status == 0x18) { /* SLA+W has been transmitted and ACK has been received */
-        I2C_SET_DATA(I2C1, I2c1_TxData[I2c1_DataLen++]);
-        I2C_SET_CONTROL_REG(I2C1, I2C_CTL_SI);
-    } else if (Status == 0x20) { /* SLA+W has been transmitted and NACK has been received */
-        I2C_SET_CONTROL_REG(I2C1, I2C_CTL_STO | I2C_CTL_SI);
-    } else if (Status == 0x28) { /* DATA has been transmitted and ACK has been received */
-        if (I2c1_DataLen < 1) {
-            I2C_SET_DATA(I2C1, I2c1_TxData[I2c1_DataLen++]);
-            I2C_SET_CONTROL_REG(I2C1, I2C_CTL_SI);
-        } else {
-            I2C_SET_CONTROL_REG(I2C1, I2C_CTL_STA | I2C_CTL_SI);
-        }
-    } else if (Status == 0x10) { /* Repeat START has been transmitted and prepare SLA+R */
-        I2C_SET_DATA(I2C1, (TOUCH_SLAVE_ADDR << 1) | 0x01);  /* Write SLA+R to Register I2CDAT */
-        I2C_SET_CONTROL_REG(I2C1, I2C_CTL_SI);
-    } else if (Status == 0x40) { /* SLA+R has been transmitted and ACK has been received */
-        I2C_SET_CONTROL_REG(I2C1, I2C_CTL_SI);
-    } else if (Status == 0x58) { /* DATA has been received and NACK has been returned */
-        I2c1_RxData = I2C_GET_DATA(I2C1);
-        I2c1_EndFlag = 1;
-        I2C_SET_CONTROL_REG(I2C1, I2C_CTL_STO | I2C_CTL_SI);
-    } else {
-        /* TO DO */
-        printf("I2C1 - Status 0x%x is NOT processed\n", Status);
-    }
-}
-
-/*---------------------------------------------------------------------------------------------------------*/
-/*  RwI2cTouchSensor Function                                                                               */
-/*---------------------------------------------------------------------------------------------------------*/
-void RwI2cTouchSensor (uint8_t Command, uint8_t Rw) {
-
-  s_I2C1HandlerFn = NULL;
-
-  if (Rw) {
-      /* I2C function to read data from slave */
-      s_I2C1HandlerFn = (I2C_FUNC)eWD608ReadByte;
-  }
-
-  if (s_I2C1HandlerFn != NULL) {
-      I2c1_DeviceAddr = TOUCH_SLAVE_ADDR;
-      I2c1_TxData[0] = Command;
-      I2c1_DataLen = 0;
-      I2c1_EndFlag = 0;
-
-      /* I2C as master sends START signal */
-      I2C_SET_CONTROL_REG(I2C1, I2C_CTL_STA);
-  }
-
-  return;
-}
-
-/*---------------------------------------------------------------------------------------------------------*/
-/*  I2C2 IRQ Handler                                                                                       */
-/*---------------------------------------------------------------------------------------------------------*/
-void I2C2_IRQHandler(void)
-{
-  uint32_t u32Status;
-
-  u32Status = I2C_GET_STATUS(I2C2);
-
-  if (I2C_GET_TIMEOUT_FLAG(I2C2)) {
-      /* Clear I2C0 Timeout Flag */
-      I2C_ClearTimeoutFlag(I2C2);
-  } else {
-      if (s_I2C2HandlerFn != NULL)
-          s_I2C2HandlerFn(u32Status);
-  }
-}
-#endif
 
 /*---------------------------------------------------------------------------------------------------------*/
 /*  EepromReadByte Callback Function                                                                       */
@@ -765,9 +704,9 @@ void Platform_Initialize (void) {
   g_enable_Touch = 0;
 
 #if GUI_SUPPORT_TOUCH
-    //WM_SetCreateFlags(WM_CF_MEMDEV);
+    WM_SetCreateFlags(WM_CF_MEMDEV);
     GUI_Init();
-    //WM_MULTIBUF_Enable(1);
+    WM_MULTIBUF_Enable(1);
 
     Init_TouchPanel();
     /* Unlock protected registers */

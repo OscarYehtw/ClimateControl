@@ -374,11 +374,9 @@ void TouchPadStateTask (TOUCH_PAD_CTRL_STRC *Ctrl) {
       return;
   }
 
-  if (Ctrl->Offset <= eWD608_VECTOR) {
-      ReadingTouchSensor (Ctrl->ctx, TOUCH_SLAVE_ADDR, Ctrl->Offset, 0x01, TRUE);
-      Ctrl->Valid = TRUE;
-      //TOUCH_PAD_STATE_MSG("ReadingTouchSensor(), Offset: %x\n", Ctrl->Offset);
-  }
+  ReadingTouchSensor (Ctrl->ctx, &Ctrl->entry[Ctrl->Index]);
+  Ctrl->Valid = TRUE;
+  TOUCH_PAD_STATE_MSG("ReadingTouchSensor, Index: %d\n", Ctrl->Index);
 
   return;
 }
@@ -391,44 +389,54 @@ void TouchPadStateCtrl (TOUCH_PAD_CTRL_STRC *Ctrl) {
   switch(Ctrl->Touch_State) {
          case INIT_STATE:
               Ctrl->TimerPtr = TimerCtrlPtr;
+              Ctrl->Index    = 0;
+              Ctrl->entry    = g_I2C_AccessTable;
               Ctrl->ctx      = &I2C2_Ctx;
-              Ctrl->Offset   = eWD608_RESULT;
-              Ctrl->Valid    = FALSE;
+              Ctrl->ThermostatDataPtr->EepromTxData[0] = 0x05;  // EEPROM Offset (low byte)
+              Ctrl->ThermostatDataPtr->EepromTxData[1] = 0x00;  // EEPROM Offset (high byte)
+              Ctrl->ThermostatDataPtr->EepromTxData[2] = 0xA5;  // EEPROM write data
+              Ctrl->Valid = FALSE;
               Ctrl->Touch_State = WAIT_CMD_STATE;
               break;
          case CHANGE_STATE:
-              if (Ctrl->TimerPtr->TOUCH_PAD_TIMER >= 30 && Ctrl->ctx->txrxDone == TRUE) {
-                  switch (Ctrl->Offset) {
-                          case eWD608_RESULT:
-                               if (Ctrl->ctx->rxData == (TOUCH_EVENT | NEW_CURSOR_EVENT | CURSOR_0_EVENT)) {
-                                   Ctrl->ThermostatDataPtr->MISC.TOUCH_PRESSED = TRUE;
-                               } else {
-                                   Ctrl->ThermostatDataPtr->MISC.TOUCH_PRESSED = FALSE;
-                               }
-                               break;
-                          case eWD608_CURSOR_L:
-                               Ctrl->ThermostatDataPtr->TouchRawData0 = Ctrl->ctx->rxData;
-                               break;
-                          case eWD608_CURSOR_H:
-                               Ctrl->ThermostatDataPtr->TouchRawData1 = Ctrl->ctx->rxData;
-                               break;
-                          case eWD608_VECTOR:
-                               if (Ctrl->ctx->rxData == eWD608_FORWARD) {
-                                   Ctrl->ThermostatDataPtr->MISC.TOUCH_FORWARD = TRUE;
-                                   Ctrl->ThermostatDataPtr->MISC.TOUCH_REVERSE = FALSE;
-                               } else if (Ctrl->ctx->rxData == eWD608_REVERSE) {
-                                   Ctrl->ThermostatDataPtr->MISC.TOUCH_REVERSE = TRUE;
-                                   Ctrl->ThermostatDataPtr->MISC.TOUCH_FORWARD = FALSE;
-                               }
-                               break;
+              if (Ctrl->TimerPtr->TOUCH_PAD_TIMER >= 50 && Ctrl->ctx->txrxDone == TRUE) {
+                  if (Ctrl->entry[Ctrl->Index].SlaveAddr == TOUCH_SLAVE_ADDR) {
+                      switch (Ctrl->entry[Ctrl->Index].Offset) {
+                              case eWD608_RESULT:
+                                   if (*Ctrl->entry[Ctrl->Index].RxData == (TOUCH_EVENT | NEW_CURSOR_EVENT | CURSOR_0_EVENT)) {
+                                       Ctrl->ThermostatDataPtr->MISC.TOUCH_PRESSED = TRUE;
+                                   } else {
+                                       Ctrl->ThermostatDataPtr->MISC.TOUCH_PRESSED = FALSE;
+                                   }
+                                   Ctrl->ThermostatDataPtr->MISC.TOUCH_RESULT_AVAILABLE = TRUE;
+                                   break;
+                              case eWD608_CURSOR_L:
+                                   Ctrl->ThermostatDataPtr->MISC.TOUCH_CURSOR_L_AVAILABLE = TRUE;
+                                   break;
+                              case eWD608_CURSOR_H:
+                                   Ctrl->ThermostatDataPtr->MISC.TOUCH_CURSOR_H_AVAILABLE = TRUE;
+                                   break;
+                              case eWD608_VECTOR:
+                                   if (*Ctrl->entry[Ctrl->Index].RxData == eWD608_FORWARD) {
+                                       Ctrl->ThermostatDataPtr->MISC.TOUCH_FORWARD = TRUE;
+                                       Ctrl->ThermostatDataPtr->MISC.TOUCH_REVERSE = FALSE;
+                                   } else if (*Ctrl->entry[Ctrl->Index].RxData == eWD608_REVERSE) {
+                                       Ctrl->ThermostatDataPtr->MISC.TOUCH_REVERSE = TRUE;
+                                       Ctrl->ThermostatDataPtr->MISC.TOUCH_FORWARD = FALSE;
+                                   }
+                                   Ctrl->ThermostatDataPtr->MISC.TOUCH_VECTOR_AVAILABLE = TRUE;
+                                   break;
+                      }
                   }
-                  Ctrl->Offset = (++Ctrl->Offset <= eWD608_VECTOR) ? Ctrl->Offset : eWD608_RESULT;
+
+                  if (Ctrl->entry[Ctrl->Index].Rw == I2C_RW_READ)
+                      TOUCH_PAD_STATE_MSG("[%d] Offset: 0x%x Data: 0x%x\n", Ctrl->Index, Ctrl->entry[Ctrl->Index].Offset, *Ctrl->entry[Ctrl->Index].RxData);
+                  else
+                      TOUCH_PAD_STATE_MSG("[%d] Offset: 0x%x\n", Ctrl->Index, Ctrl->entry[Ctrl->Index].Offset);
+
+                  Ctrl->Index = (++Ctrl->Index < g_I2C_AccessCount) ? Ctrl->Index : 0;
                   Ctrl->ctx->txrxDone = FALSE;
                   Ctrl->Touch_State = WAIT_CMD_STATE;
-                  TOUCH_PAD_STATE_MSG("Data: 0x%x, PRESS: %x, FORWARD: %x, REVERSE: %x\n", \
-                                      (Ctrl->ThermostatDataPtr->TouchRawData0 | (Ctrl->ThermostatDataPtr->TouchRawData1 << 8)), \
-                                      Ctrl->ThermostatDataPtr->MISC.TOUCH_PRESSED, Ctrl->ThermostatDataPtr->MISC.TOUCH_FORWARD, \
-                                      Ctrl->ThermostatDataPtr->MISC.TOUCH_REVERSE);
               }
               break;
          case HOLD_STATE:
@@ -466,7 +474,7 @@ void RotaryStateInit (GUI_ROTARY_CTRL_STRC *Ctrl) {
   RotaryStateTask handler
  *----------------------------------------------------------------------------*/
 void RotaryStateTask (GUI_ROTARY_CTRL_STRC *Ctrl) {
-  uint16_t cursorVal;
+  uint16_t cursorVal = 0;
 
   if (Ctrl->Rotary_State == INIT_STATE                  || \
       Ctrl->Rotary_State == CHANGE_STATE                || \
@@ -481,15 +489,20 @@ void RotaryStateTask (GUI_ROTARY_CTRL_STRC *Ctrl) {
       return;
   }
 
-  cursorVal = (Ctrl->ThermostatDataPtr->TouchRawData0 | \
-               (Ctrl->ThermostatDataPtr->TouchRawData1 << 8));
+  if (Ctrl->ThermostatDataPtr->MISC.TOUCH_CURSOR_L_AVAILABLE == TRUE && \
+      Ctrl->ThermostatDataPtr->MISC.TOUCH_CURSOR_H_AVAILABLE == TRUE) {
+      cursorVal = (Ctrl->ThermostatDataPtr->TouchCursorL | \
+                  (Ctrl->ThermostatDataPtr->TouchCursorH << 8));
 
-  Ctrl->target = (I32)(1500 + (cursorVal * 50));
-  Ctrl->rotaryVal = APP_Target_Rotary_GetValue();
+      Ctrl->target = (I32)(1500 + (cursorVal * 50));
+      Ctrl->rotaryVal = APP_Target_Rotary_GetValue();
 
-  if (Ctrl->rotaryVal != Ctrl->target) {
-      Ctrl->Rotary_State = ROTARY_CLICK_STATE;
-      GUI_ROTARY_STATE_MSG("cursorVal: %d, rotaryVal: %d, taget: %d\n", cursorVal, Ctrl->rotaryVal, Ctrl->target);
+      if (Ctrl->rotaryVal != Ctrl->target) {
+          Ctrl->Rotary_State = ROTARY_CLICK_STATE;
+          GUI_ROTARY_STATE_MSG("cursorVal: %d, rotaryVal: %d, taget: %d\n", cursorVal, Ctrl->rotaryVal, Ctrl->target);
+      }
+      Ctrl->ThermostatDataPtr->MISC.TOUCH_CURSOR_L_AVAILABLE = FALSE;
+      Ctrl->ThermostatDataPtr->MISC.TOUCH_CURSOR_H_AVAILABLE = FALSE;
   }
 
   //Ctrl->Valid = TRUE;
@@ -542,7 +555,7 @@ void RotaryStateCtrl (GUI_ROTARY_CTRL_STRC *Ctrl) {
               //GUI_ROTARY_STATE_MSG("ROTARY_SET_VALUE_STATE - %d\n", Ctrl->rotaryVal);
               break;
          case ROTARY_SET_VALUE_HOLD_STATE:
-              if (Ctrl->TimerPtr->GUI_ROTARY_TIMER >= 300) {
+              if (Ctrl->TimerPtr->GUI_ROTARY_TIMER >= 50) {
                   Ctrl->Rotary_State = ROTARY_RELEASE_STATE;
                   if (Ctrl->rotaryVal != Ctrl->target)
                       Ctrl->Rotary_State = ROTARY_SET_VALUE_STATE;
@@ -687,7 +700,6 @@ void EepromReadStateTask (EEPROM_READ_CTRL_STRC *Ctrl) {
   }
  
   if (Ctrl->Offset < (64 * 1024)) {
-  //if (Ctrl->Offset < (512)) {
       RwEepromDataByte (Ctrl->Offset, 0, TRUE);
       Ctrl->Valid = TRUE;
       EEPROM_READ_STATE_MSG("Eeprom Read Start, Offset: 0x%x\n", Ctrl->Offset);
