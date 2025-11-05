@@ -448,7 +448,7 @@ static void _cbGlow(WM_MESSAGE * pMsg) {
 }
 #endif
 
-#if 1
+#if 0
 static void _AnimGlow(GUI_ANIM_INFO * pInfo, void * pVoid) {
   int *pDepth = (int *)pVoid;
     *pDepth = pInfo->Pos;
@@ -575,6 +575,7 @@ static void _StopAnim(void) {
   }
 }
 
+#if 0
 /*********************************************************************
 *
 *       _CreateGlowingWindow
@@ -587,6 +588,7 @@ static void _CreateGlowingWindow(GUI_TIMER_MESSAGE* pTM) {
   }
   GUI_TIMER_Delete(pTM->hTimer);
 }
+#endif
 
 /*********************************************************************
 *
@@ -601,7 +603,7 @@ static void _HideTextAndStopAnim(void) {
     //
     // Create glowing window
     //
-    //OscarYeh GUI_TIMER_Create(_CreateGlowingWindow, _Context.GlowDelay, 0, 0);
+    //GUI_TIMER_Create(_CreateGlowingWindow, _Context.GlowDelay, 0, 0);
   }
 }
 
@@ -646,7 +648,7 @@ static GUI_COLOR _GetBkColor(void) {
 }
 #endif
 
-static GUI_COLOR _GetBkColor(void) {
+GUI_COLOR _GetBkColor(void) {
   int Diff, AbsDiff, Intens;
   float ratio;
   U8 rBase, gBase, bBase;

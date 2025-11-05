@@ -501,6 +501,7 @@ void RotaryStateTask (GUI_ROTARY_CTRL_STRC *Ctrl) {
           Ctrl->Rotary_State = ROTARY_CLICK_STATE;
           GUI_ROTARY_STATE_MSG("cursorVal: %d, rotaryVal: %d, taget: %d\n", cursorVal, Ctrl->rotaryVal, Ctrl->target);
       }
+      Ctrl->last_target = Ctrl->target;
       Ctrl->ThermostatDataPtr->MISC.TOUCH_CURSOR_L_AVAILABLE = FALSE;
       Ctrl->ThermostatDataPtr->MISC.TOUCH_CURSOR_H_AVAILABLE = FALSE;
   }
@@ -517,12 +518,10 @@ void RotaryStateCtrl (GUI_ROTARY_CTRL_STRC *Ctrl) {
 
   switch(Ctrl->Rotary_State) {
          case INIT_STATE:
-              Ctrl->TimerPtr       = TimerCtrlPtr;
-              Ctrl->last_rotaryVal = 0;
-              Ctrl->pressed        = FALSE;
-              Ctrl->last_pressed   = FALSE;
-              Ctrl->Valid          = FALSE;
-              Ctrl->Rotary_State  = WAIT_CMD_STATE;
+              Ctrl->TimerPtr     = TimerCtrlPtr;
+              Ctrl->last_target  = 0;
+              Ctrl->Valid        = FALSE;
+              Ctrl->Rotary_State = WAIT_CMD_STATE;
               break;
          case CHANGE_STATE:
               if (Ctrl->TimerPtr->GUI_ROTARY_TIMER >= 300) {
@@ -559,6 +558,7 @@ void RotaryStateCtrl (GUI_ROTARY_CTRL_STRC *Ctrl) {
                   Ctrl->Rotary_State = ROTARY_RELEASE_STATE;
                   if (Ctrl->rotaryVal != Ctrl->target)
                       Ctrl->Rotary_State = ROTARY_SET_VALUE_STATE;
+                  //GUI_ROTARY_STATE_MSG("ROTARY_SET_VALUE_HOLD_STATE - %d, %d\n", Ctrl->rotaryVal, Ctrl->target);
               }
               break;
          case ROTARY_RELEASE_STATE:

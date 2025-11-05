@@ -55,6 +55,7 @@ extern GUI_CONST_STORAGE unsigned char acScale_240x240[];
 extern GUI_CONST_STORAGE unsigned char acLeaf_30x39[];
 extern GUI_CONST_STORAGE unsigned char acIndicatorActual_18x2[];
 extern GUI_CONST_STORAGE unsigned char acIndicatorTarget_24x3[];
+extern GUI_CONST_STORAGE unsigned char _acFan_40x40[58386UL + 1];
 
 /*********************************************************************
 *

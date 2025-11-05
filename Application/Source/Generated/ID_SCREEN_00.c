@@ -79,7 +79,8 @@ static APPW_CREATE_ITEM _aCreate[] = {
         { DISPOSE_MODE_NULL, 0, 0, 0 },
         { DISPOSE_MODE_NULL, 0, 0, 0 },
       },
-      30, 39, 0, 0, 0, 0
+      //30, 39, 0, 0, 0, 0
+      40, 40, 0, 0, 0, 0
     },
     { 0, 0 }
   },
@@ -170,8 +171,8 @@ static GUI_CONST_STORAGE APPW_SETUP_ITEM _aSetup[] = {
   { ID_BOX,           APPW_SET_PROP_COLOR,        { ARG_V(GUI_BLACK) } },
   //{ ID_IMAGE_SCALE,   APPW_SET_PROP_SBITMAP,      { ARG_VP(0, acScale_240x240),
   //                                                  ARG_V(23365), } },
-  { ID_IMAGE_LEAF,    APPW_SET_PROP_SBITMAP,      { ARG_VP(0, acLeaf_30x39),
-                                                    ARG_V(1673), } },
+  //{ ID_IMAGE_LEAF,    APPW_SET_PROP_SBITMAP,      { ARG_VP(0, acLeaf_30x39),
+  //                                                  ARG_V(1673), } },
   { ID_TEXT_L,        APPW_SET_PROP_COLOR,        { ARG_V(GUI_WHITE) } },
   { ID_TEXT_L,        APPW_SET_PROP_DECMODE,      { ARG_V(2),
                                                     ARG_V(0),

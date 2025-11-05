@@ -149,12 +149,11 @@ typedef struct {
   uint8_t              Valid;
   uint8_t              Rotary_State;
   int32_t              target;
+  int32_t              last_target;
   int32_t              rotaryVal;
-
-  uint8_t              pressed;
-  uint8_t              last_pressed;
-  int32_t              last_rotaryVal;
-  
+  //uint8_t              pressed;
+  //uint8_t              last_pressed;
+  //int32_t              last_rotaryVal;
   THERMOSTAT_DATA_STRC *ThermostatDataPtr;
   TIMER_CTRL_STRC      *TimerPtr;
 } GUI_ROTARY_CTRL_STRC;
